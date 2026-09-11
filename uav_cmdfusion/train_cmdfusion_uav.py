@@ -21,13 +21,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-# ---- Ensure project root is on path ----
+# ---- Ensure local dir is on path ----
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_PROJECT_ROOT = os.path.dirname(_THIS_DIR)
 if _THIS_DIR not in sys.path:
     sys.path.insert(0, _THIS_DIR)
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
 
 from data_utils import (
     get_train_val_test_split,

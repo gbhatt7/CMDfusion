@@ -56,12 +56,8 @@ def scatter_mean(src: torch.Tensor, index: torch.Tensor, dim: int = 0, dim_size:
     
     return out / count
 
-# Import lovasz_softmax from existing utils/
-_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_PROJECT_ROOT = os.path.dirname(_THIS_DIR)
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
-from utils.lovasz_loss import lovasz_softmax
+# Import lovasz_softmax locally
+from lovasz_loss import lovasz_softmax
 
 
 # ====================================================================
