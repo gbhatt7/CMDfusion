@@ -419,9 +419,14 @@ def verify_sequence_labels(seq_name, min_frames=1):
 
     label_dir = os.path.join(LIDAR_LABEL_DIR, seq_name, "interval5_LIDAR_label_id")
     if not os.path.isdir(label_dir):
-        raise FileNotFoundError(
-            f"Label directory does not exist for '{seq_name}': {label_dir}"
-        )
+        # Fallback to without the inner directory
+        fallback_dir = os.path.join(LIDAR_LABEL_DIR, seq_name)
+        if os.path.isdir(fallback_dir):
+            label_dir = fallback_dir
+        else:
+            raise FileNotFoundError(
+                f"Label directory does not exist for '{seq_name}': {label_dir} or {fallback_dir}"
+            )
     n_files = len([f for f in os.listdir(label_dir) if f.endswith(".npy")])
     if n_files < min_frames:
         raise ValueError(
@@ -488,8 +493,16 @@ def get_frame_list(seq_name):
     Only frames where *all three* files exist are returned.
     """
     lidar_dir = os.path.join(CAM_LIDAR_DIR, seq_name, "interval5_LIDAR")
+    if not os.path.isdir(lidar_dir):
+        lidar_dir = os.path.join(CAM_LIDAR_DIR, seq_name)
+        
     cam_dir = os.path.join(CAM_LIDAR_DIR, seq_name, "interval5_CAM")
+    if not os.path.isdir(cam_dir):
+        cam_dir = os.path.join(CAM_LIDAR_DIR, seq_name)
+        
     label_dir = os.path.join(LIDAR_LABEL_DIR, seq_name, "interval5_LIDAR_label_id")
+    if not os.path.isdir(label_dir):
+        label_dir = os.path.join(LIDAR_LABEL_DIR, seq_name)
 
     lidar_files = sorted(f for f in os.listdir(lidar_dir) if f.endswith(".npy"))
     cam_set = set(os.listdir(cam_dir)) if os.path.isdir(cam_dir) else set()
