@@ -1,18 +1,21 @@
-# 1. Create and activate the conda environment
-conda create -n cmdfusion python=3.10 -y
+# 1. Create and activate the conda environment (Python 3.8 is best for older PyTorch versions)
+conda create -n cmdfusion python=3.8 -y
 conda activate cmdfusion
 
-# 2. Install PyTorch with CUDA support (CUDA 11.8)
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+# 2. Install PyTorch 1.9.0 with CUDA 11.1 (Matching the original repo exactly)
+pip install torch==1.9.0+cu111 torchvision==0.10.0+cu111 -f https://download.pytorch.org/whl/torch_stable.html
 
-# 3. Install SPConv (Sparse 3D convolutions for CUDA 11.8)
-pip install spconv-cu118
+# 3. Install SPConv 2.1.16 for CUDA 11.1
+pip install spconv-cu111==2.1.16
 
-# 4. Install Torch-Scatter
-pip install torch-scatter
+# 4. Install Torch-Scatter (specifically built for PyTorch 1.9.0 + CUDA 11.1)
+pip install torch-scatter -f https://data.pyg.org/whl/torch-1.9.0+cu111.html
 
-# 5. Install the remaining Python packages
-pip install numpy Pillow matplotlib pyyaml ipykernel
+# 5. Install the remaining specific packages from the original repo
+pip install pyyaml easydict pyquaternion pytorch_lightning==1.3.8 torchmetrics==0.5 nuscenes-devkit
 
-# 6. Register the environment so Jupyter Notebook can see it
+# 6. Install supporting notebook libraries
+pip install numpy Pillow matplotlib ipykernel
+
+# 7. Register the environment so Jupyter Notebook can see it
 python -m ipykernel install --user --name cmdfusion --display-name "cmdfusion"
