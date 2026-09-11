@@ -27,13 +27,34 @@ Components adapted from:
 import os
 import sys
 import torch
-import torch_scatter
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 import spconv.pytorch as spconv
 from torchvision.models.resnet import resnet34, resnet50
 from torchvision import transforms
+
+def scatter_mean(src: torch.Tensor, index: torch.Tensor, dim: int = 0, dim_size: int = None) -> torch.Tensor:
+    """PyTorch native implementation of torch_scatter.scatter_mean"""
+    if dim_size is None:
+        dim_size = int(index.max().item()) + 1 if index.numel() > 0 else 0
+    
+    out_shape = list(src.shape)
+    out_shape[dim] = dim_size
+    
+    index_expanded = index
+    for _ in range(src.dim() - index.dim()):
+        index_expanded = index_expanded.unsqueeze(-1)
+    index_expanded = index_expanded.expand_as(src)
+    
+    out = src.new_zeros(out_shape)
+    out.scatter_add_(dim, index_expanded, src)
+    
+    count = src.new_zeros(out_shape)
+    count.scatter_add_(dim, index_expanded, torch.ones_like(src))
+    count.clamp_(min=1)
+    
+    return out / count
 
 # Import lovasz_softmax from existing utils/
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -145,7 +166,7 @@ class Voxel3DGeneratorG(nn.Module):
         )
 
     def prepare_input(self, point, grid_ind, inv_idx):
-        pc_mean = torch_scatter.scatter_mean(
+        pc_mean = scatter_mean(
             point[:, :3], inv_idx, dim=0
         )[inv_idx]
         nor_pc = point[:, :3] - pc_mean
@@ -168,7 +189,7 @@ class Voxel3DGeneratorG(nn.Module):
         )
         pt_fea = self.PPmodel(pt_fea)
 
-        features = torch_scatter.scatter_mean(
+        features = scatter_mean(
             pt_fea, data_dict['scale_1']['coors_inv'], dim=0
         )
         spatial_shape_rev = np.int32(self.spatial_shape)[::-1].tolist()
@@ -235,7 +256,7 @@ class PointEncoder(nn.Module):
         inv = torch.unique(
             torch.cat([batch, coors], 1), return_inverse=True, dim=0
         )[1]
-        return torch_scatter.scatter_mean(p_fea, inv, dim=0), inv
+        return scatter_mean(p_fea, inv, dim=0), inv
 
     def forward(self, features, data_dict):
         output, inv = self.downsample(
@@ -245,7 +266,7 @@ class PointEncoder(nn.Module):
         output = self.PPmodel(output)[inv]
         output = torch.cat([identity, output], dim=1)
 
-        v_feat = torch_scatter.scatter_mean(
+        v_feat = scatter_mean(
             self.layer_out(
                 output[data_dict['coors_inv_{}'.format(self.modality)]]
             ),
@@ -295,7 +316,7 @@ class SPVBlock(nn.Module):
         data_dict[layer_key]['pts_feat'] = v_fea.features
         data_dict[layer_key]['full_coors'] = \
             data_dict['full_coors_{}'.format(self.modality)]
-        v_fea_inv = torch_scatter.scatter_mean(
+        v_fea_inv = scatter_mean(
             v_fea.features[coors_inv_last], coors_inv, dim=0
         )
 
@@ -507,7 +528,19 @@ class CMDFuse(nn.Module):
         inv_ind = torch.unique(
             unq_lbxyz[:, 1:], return_inverse=True, dim=0
         )[1]
-        label_ind = torch_scatter.scatter_max(count, inv_ind)[1]
+        
+        if len(count) == 0:
+            return labels.new_empty(0)
+
+        max_count = count.max().item()
+        combined_key = inv_ind.to(torch.int64) * (max_count + 1) + count.to(torch.int64)
+        sort_idx = torch.argsort(combined_key)
+        sorted_inv_ind = inv_ind[sort_idx]
+        
+        is_last = torch.ones(len(sorted_inv_ind), dtype=torch.bool, device=count.device)
+        is_last[:-1] = sorted_inv_ind[1:] != sorted_inv_ind[:-1]
+        label_ind = sort_idx[is_last]
+        
         labels = unq_lbxyz[:, 0][label_ind]
         return labels
 
