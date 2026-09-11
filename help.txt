@@ -1,5 +1,18 @@
-# Step 1: Install PyTorch first
+# 1. Create and activate the conda environment
+conda create -n cmdfusion python=3.10 -y
+conda activate cmdfusion
+
+# 2. Install PyTorch with CUDA support (CUDA 11.8)
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 
-# Step 2: THEN install everything else
-pip install spconv-cu118 torch-scatter numpy Pillow matplotlib pyyaml ipykernel
+# 3. Install SPConv (Sparse 3D convolutions for CUDA 11.8)
+pip install spconv-cu118
+
+# 4. Install Torch-Scatter
+pip install torch-scatter
+
+# 5. Install the remaining Python packages
+pip install numpy Pillow matplotlib pyyaml ipykernel
+
+# 6. Register the environment so Jupyter Notebook can see it
+python -m ipykernel install --user --name cmdfusion --display-name "cmdfusion"
