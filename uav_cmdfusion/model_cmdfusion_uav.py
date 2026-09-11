@@ -824,25 +824,41 @@ class CMDFusionUAV(nn.Module):
             ignore_label=ignore_label,
         )
 
-    def forward(self, data_dict):
-        """Full CMDFusion forward pass.
+    def forward(self, point_cloud_or_dict, img=None, proj_indices=None):
+        """Full CMDFusion forward pass. Supports both native dict and PMNet format.
 
-        Args:
-            data_dict: dict from collate_fn_uav() with keys:
-              - points:          (total_N, 3) flat point features
-              - batch_idx:       (total_N,) batch index
-              - labels:          (total_N,) ground truth labels
-              - batch_size:      int
-              - img:             (B, 3, H, W) images
-              - img_indices:     list of (M_i, 2) pixel coords per batch
-              - point2img_index: list of (M_i,) visible point indices
-
-        Returns:
-            data_dict with added keys:
-              - logits:           (total_N, C) 3D-only logits
-              - fuse_pts_scale_all: (total_N, C) fused logits (primary)
-              - loss:             scalar training loss
+        Args (Native):
+            data_dict: dict from collate_fn_uav() with keys.
+        Args (PMNet format):
+            point_cloud: (B, N, C) flat point features
+            img: (B, 3, H, W) images
+            proj_indices: (B, N, 2) pixel coords per point
         """
+        if isinstance(point_cloud_or_dict, dict):
+            data_dict = point_cloud_or_dict
+        else:
+            # It's PMNet format: point_cloud, img, proj_indices
+            point_cloud = point_cloud_or_dict
+            B, N, _ = point_cloud.shape
+            device = point_cloud.device
+            
+            img_indices_list = []
+            point2img_index_list = []
+            for i in range(B):
+                img_indices_list.append(proj_indices[i].round().long())
+                point2img_index_list.append(torch.arange(N, device=device))
+                
+            data_dict = {
+                'points': point_cloud.reshape(-1, point_cloud.shape[-1]),
+                'batch_idx': torch.arange(B, device=device).view(-1, 1).expand(B, N).reshape(-1),
+                'batch_size': B,
+                'img': img,
+                'img_indices': img_indices_list,
+                'point2img_index': point2img_index_list,
+                'labels': torch.zeros(B * N, dtype=torch.long, device=device),
+                'loss': 0.0
+            }
+
         # ============ Freeze 2D backbone during training ============
         self.model_2d.eval()
         for p in self.model_2d.parameters():
@@ -864,7 +880,7 @@ class CMDFusionUAV(nn.Module):
         process_keys = [
             k for k in data_dict.keys() if k.find('img_scale') != -1
         ]
-        img_indices = data_dict['img_indices']
+        img_indices_dict = data_dict['img_indices']
 
         temp = {k: [] for k in process_keys}
         for i in range(data_dict['batch_size']):
@@ -873,7 +889,7 @@ class CMDFusionUAV(nn.Module):
                 # then index by (row, col) to get (M_i, C) features
                 temp[k].append(
                     data_dict[k].permute(0, 2, 3, 1)[i][
-                        img_indices[i][:, 0], img_indices[i][:, 1]
+                        img_indices_dict[i][:, 0], img_indices_dict[i][:, 1]
                     ]
                 )
         for k in process_keys:
@@ -882,7 +898,14 @@ class CMDFusionUAV(nn.Module):
         # ============ Bidirectional fusion ============
         data_dict = self.fusion(data_dict)
 
-        return data_dict
+        if isinstance(point_cloud_or_dict, dict):
+            return data_dict
+        else:
+            # PMNet compatible output: (pred, feat)
+            logits = data_dict['fuse_pts_scale_all'] # (B*N, C)
+            C = logits.shape[1]
+            pred = logits.view(B, N, C).permute(0, 2, 1) # -> (B, C, N)
+            return pred, None
 
 
 # ====================================================================
