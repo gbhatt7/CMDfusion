@@ -1,0 +1,5 @@
+# Step 1: Install PyTorch first
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+
+# Step 2: THEN install everything else
+pip install spconv-cu118 torch-scatter numpy Pillow matplotlib pyyaml ipykernel
